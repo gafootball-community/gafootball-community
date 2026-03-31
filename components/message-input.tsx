@@ -36,6 +36,7 @@ export function MessageInput({ roomId }: Props) {
 
       setValue('');
     } catch (e) {
+      console.error('send message error:', e);
       window.alert(
         e instanceof Error
           ? e.message
@@ -56,8 +57,11 @@ export function MessageInput({ roomId }: Props) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="メッセージを入力"
-          className="h-11 flex-1 rounded-full border border-white/10 bg-panelSoft px-4 text-sm text-textMain placeholder:text-textSub focus:border-accent focus:outline-none"
+          className="h-11 flex-1 rounded-full border border-white/10 bg-panelSoft px-4 text-base text-textMain placeholder:text-textSub focus:border-accent focus:outline-none"
           maxLength={500}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
         />
 
         <button
@@ -65,7 +69,7 @@ export function MessageInput({ roomId }: Props) {
           disabled={sending || value.trim().length === 0}
           className="h-11 rounded-full bg-accent px-4 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
         >
-          送信
+          {sending ? '送信中' : '送信'}
         </button>
       </div>
     </form>
