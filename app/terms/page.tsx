@@ -1,15 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 
 export default function TermsPage() {
-  const searchParams = useSearchParams();
-  const isFromProfile = searchParams.get('from') === 'profile';
-
-  const backHref = isFromProfile ? '/profile' : '/';
-  const topBackLabel = isFromProfile ? '← 戻る' : '← ログイン画面に戻る';
-  const bottomBackLabel = isFromProfile ? '戻る' : 'ログイン画面に戻る';
+  const backHref = '/';
+  const topBackLabel = '← ログイン画面に戻る';
+  const bottomBackLabel = 'ログイン画面に戻る';
 
   return (
     <main className="mx-auto max-w-2xl px-4 pb-28 pt-4 text-sm leading-relaxed text-textMain">
