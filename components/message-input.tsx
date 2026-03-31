@@ -50,7 +50,7 @@ export function MessageInput({ roomId }: Props) {
   return (
     <form
       onSubmit={sendMessage}
-      className="fixed inset-x-0 bottom-[calc(4.1rem+env(safe-area-inset-bottom))] z-20 border-t border-white/10 bg-panel/95 px-3 py-2 backdrop-blur"
+      className="fixed inset-x-0 bottom-[calc(4.13rem+env(safe-area-inset-bottom))] z-20 border-t border-white/10 bg-panel/95 px-3 py-2 backdrop-blur"
     >
       <div className="mx-auto flex max-w-md items-center gap-2">
         <input
