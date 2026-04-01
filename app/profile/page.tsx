@@ -202,19 +202,14 @@ export default function ProfilePage() {
 
         {showMenu && (
           <div className="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-panel/95 p-2 text-sm text-white shadow-lg backdrop-blur">
-            <Link
-              href="/terms?from=profile"
-              className="block rounded-md px-3 py-2 hover:bg-white/10"
-              onClick={() => setShowMenu(false)}
-            >
+            <Link href="/profile/terms" className="block rounded-md px-3 py-2 hover:bg-white/10" onClick={() => setShowMenu(false)}>
               利用規約
             </Link>
-            <Link
-              href="/privacy?from=profile"
-              className="block rounded-md px-3 py-2 hover:bg-white/10"
-              onClick={() => setShowMenu(false)}
-            >
+            <Link href="/profile/privacy" className="block rounded-md px-3 py-2 hover:bg-white/10" onClick={() => setShowMenu(false)}>
               プライバシーポリシー
+            </Link>
+            <Link href="/profile/report" className="block rounded-md px-3 py-2 hover:bg-white/10" onClick={() => setShowMenu(false)}>
+              問題を報告
             </Link>
           </div>
         )}
@@ -258,9 +253,7 @@ export default function ProfilePage() {
                   const file = e.target.files?.[0] ?? null;
                   setAvatarFile(file);
 
-                  if (previewUrl) {
-                    URL.revokeObjectURL(previewUrl);
-                  }
+                  if (previewUrl) URL.revokeObjectURL(previewUrl);
 
                   if (file) {
                     setPreviewUrl(URL.createObjectURL(file));
@@ -276,9 +269,7 @@ export default function ProfilePage() {
             <p className="mt-3 text-xs text-textSub">タップしてアイコン変更</p>
           </div>
 
-          <label className="mt-6 block text-sm font-medium text-textSub">
-            ニックネーム
-          </label>
+          <label className="mt-6 block text-sm font-medium text-textSub">ニックネーム</label>
           <input
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
@@ -286,9 +277,7 @@ export default function ProfilePage() {
             className="mt-2 h-11 w-full rounded-xl border border-white/10 bg-panelSoft px-3 text-textMain focus:border-accent focus:outline-none"
           />
 
-          <label className="mt-4 block text-sm font-medium text-textSub">
-            自己紹介
-          </label>
+          <label className="mt-4 block text-sm font-medium text-textSub">自己紹介</label>
           <textarea
             value={bio}
             onChange={(e) => setBio(e.target.value)}
@@ -296,9 +285,7 @@ export default function ProfilePage() {
             className="mt-2 min-h-[110px] w-full rounded-xl border border-white/10 bg-panelSoft p-3 text-textMain focus:border-accent focus:outline-none"
           />
 
-          <label className="mt-4 block text-sm font-medium text-textSub">
-            お気に入りのクラブ
-          </label>
+          <label className="mt-4 block text-sm font-medium text-textSub">お気に入りのクラブ</label>
           <input
             value={favoriteClub}
             onChange={(e) => setFavoriteClub(e.target.value)}
@@ -319,7 +306,7 @@ export default function ProfilePage() {
             <button
               type="button"
               onClick={handleLogout}
-              className="h-11 w-full rounded-xl bg-gray-600 font-semibold text-white transition hover:bg-gray-500"
+              className="h-11 w-full rounded-xl bg-gray-600 font-semibold text-white hover:bg-gray-500"
             >
               ログアウト
             </button>
@@ -327,7 +314,7 @@ export default function ProfilePage() {
             <button
               type="button"
               onClick={() => setShowDeleteModal(true)}
-              className="h-11 w-full rounded-xl bg-red-600 font-semibold text-white transition hover:bg-red-500"
+              className="h-11 w-full rounded-xl bg-red-600 font-semibold text-white hover:bg-red-500"
             >
               アカウントを削除
             </button>
@@ -338,13 +325,10 @@ export default function ProfilePage() {
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
           <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-panel p-5 shadow-2xl">
-            <h2 className="text-lg font-bold text-textMain">
-              アカウントを削除しますか？
-            </h2>
+            <h2 className="text-lg font-bold text-textMain">アカウントを削除しますか？</h2>
 
-            <p className="mt-2 text-sm leading-6 text-textSub">
-              この操作は元に戻せません。
-              <br />
+            <p className="mt-2 text-sm text-textSub">
+              この操作は元に戻せません。<br />
               プロフィール情報が削除されます。
             </p>
 
@@ -353,7 +337,7 @@ export default function ProfilePage() {
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={deleting}
-                className="h-11 flex-1 rounded-xl bg-gray-600 text-sm font-semibold text-white transition hover:bg-gray-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-11 flex-1 rounded-xl bg-gray-600 text-white"
               >
                 キャンセル
               </button>
@@ -362,7 +346,7 @@ export default function ProfilePage() {
                 type="button"
                 onClick={handleDeleteAccount}
                 disabled={deleting}
-                className="h-11 flex-1 rounded-xl bg-red-600 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-11 flex-1 rounded-xl bg-red-600 text-white"
               >
                 {deleting ? '削除中...' : '削除する'}
               </button>
