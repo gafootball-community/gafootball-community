@@ -25,84 +25,84 @@ export default function AdminReportsPage() {
   const [loading, setLoading] = useState(true);
   const [workingId, setWorkingId] = useState<string | null>(null);
 
-  const fetchReports = async () => {
-    try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-
-      if (authError) throw authError;
-
-      if (!user) {
-        router.replace('/');
-        return;
-      }
-
-      const { data: myProfile, error: profileError } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', user.id)
-        .single();
-
-      if (profileError) throw profileError;
-
-      if (!myProfile?.is_admin) {
-        window.alert('管理者のみアクセスできます。');
-        router.replace('/');
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from('message_reports')
-        .select(`
-          id,
-          reason,
-          created_at,
-          reporter_id,
-          reported_profile_id,
-          status,
-          message:messages (
-            id,
-            content,
-            profile_id,
-            is_hidden
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      const normalizedReports: Report[] = (data ?? []).map((r: any) => ({
-        id: r.id,
-        reason: r.reason,
-        created_at: r.created_at,
-        reporter_id: r.reporter_id,
-        reported_profile_id:
-          r.reported_profile_id ?? r.message?.profile_id ?? null,
-        status: r.status ?? 'pending',
-        message: r.message
-          ? {
-              id: r.message.id,
-              content: r.message.content,
-              profile_id: r.message.profile_id,
-              is_hidden: Boolean(r.message.is_hidden),
-            }
-          : null,
-      }));
-
-      setReports(normalizedReports);
-    } catch (e) {
-      window.alert(
-        e instanceof Error ? e.message : '通報一覧の取得に失敗しました。'
-      );
-      router.replace('/');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const fetchReports = async () => {
+      try {
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser();
+
+        if (authError) throw authError;
+
+        if (!user) {
+          router.replace('/');
+          return;
+        }
+
+        const { data: myProfile, error: profileError } = await supabase
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError) throw profileError;
+
+        if (!myProfile?.is_admin) {
+          window.alert('管理者のみアクセスできます。');
+          router.replace('/');
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('message_reports')
+          .select(`
+            id,
+            reason,
+            created_at,
+            reporter_id,
+            reported_profile_id,
+            status,
+            message:messages (
+              id,
+              content,
+              profile_id,
+              is_hidden
+            )
+          `)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const normalizedReports: Report[] = (data ?? []).map((r: any) => ({
+          id: r.id,
+          reason: r.reason,
+          created_at: r.created_at,
+          reporter_id: r.reporter_id,
+          reported_profile_id:
+            r.reported_profile_id ?? r.message?.profile_id ?? null,
+          status: r.status ?? 'pending',
+          message: r.message
+            ? {
+                id: r.message.id,
+                content: r.message.content,
+                profile_id: r.message.profile_id,
+                is_hidden: Boolean(r.message.is_hidden),
+              }
+            : null,
+        }));
+
+        setReports(normalizedReports);
+      } catch (e) {
+        window.alert(
+          e instanceof Error ? e.message : '通報一覧の取得に失敗しました。'
+        );
+        router.replace('/');
+      } finally {
+        setLoading(false);
+      }
+    };
+
     void fetchReports();
   }, [router]);
 
@@ -113,20 +113,27 @@ export default function AdminReportsPage() {
     setWorkingId(reportId);
 
     try {
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('messages')
         .update({ is_hidden: true })
-        .eq('id', messageId)
-        .select('id, is_hidden')
-        .single();
+        .eq('id', messageId);
 
       if (error) throw error;
 
-      if (!data?.is_hidden) {
-        throw new Error('DB更新が反映されませんでした。');
-      }
+      setReports((prev) =>
+        prev.map((report) =>
+          report.id === reportId && report.message
+            ? {
+                ...report,
+                message: {
+                  ...report.message,
+                  is_hidden: true,
+                },
+              }
+            : report
+        )
+      );
 
-      await fetchReports();
       window.alert('メッセージを非表示にしました。');
     } catch (e) {
       window.alert(
@@ -151,7 +158,6 @@ export default function AdminReportsPage() {
 
       if (error) throw error;
 
-      await fetchReports();
       window.alert('ユーザーを投稿停止にしました。');
     } catch (e) {
       window.alert(
@@ -173,7 +179,14 @@ export default function AdminReportsPage() {
 
       if (error) throw error;
 
-      await fetchReports();
+      setReports((prev) =>
+        prev.map((report) =>
+          report.id === reportId
+            ? { ...report, status: 'resolved' }
+            : report
+        )
+      );
+
       window.alert('対応済みにしました。');
     } catch (e) {
       window.alert(
@@ -250,7 +263,7 @@ export default function AdminReportsPage() {
                     }}
                     className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {isWorking ? '処理中...' : 'メッセージ非表示'}
+                    メッセージ非表示
                   </button>
 
                   <button
@@ -263,7 +276,7 @@ export default function AdminReportsPage() {
                     }}
                     className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {isWorking ? '処理中...' : '投稿停止'}
+                    投稿停止
                   </button>
 
                   <button
@@ -274,7 +287,7 @@ export default function AdminReportsPage() {
                     }}
                     className="rounded-xl bg-gray-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-gray-500 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {isWorking ? '処理中...' : '対応済み'}
+                    対応済み
                   </button>
                 </div>
               </div>
