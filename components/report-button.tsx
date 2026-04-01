@@ -7,9 +7,10 @@ import { supabase } from '@/lib/supabase';
 
 type Props = {
   messageId: string;
+  reportedProfileId: string;
 };
 
-export function ReportButton({ messageId }: Props) {
+export function ReportButton({ messageId, reportedProfileId }: Props) {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedReason, setSelectedReason] = useState<string>(
@@ -49,13 +50,13 @@ export function ReportButton({ messageId }: Props) {
       const { error } = await supabase.from('message_reports').insert({
         message_id: messageId,
         reporter_id: reporterId,
+        reported_profile_id: reportedProfileId,
         reason,
       });
 
       if (error) {
         if (error.code === '23505') {
           window.alert('このメッセージはすでに通報済みです。');
-          closeModal(); // ← ここ重要
           return;
         }
 
@@ -85,14 +86,8 @@ export function ReportButton({ messageId }: Props) {
       </button>
 
       {open && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-          onClick={closeModal} // ← 背景クリックで閉じる
-        >
-          <div
-            className="w-full max-w-sm rounded-2xl border border-white/10 bg-panel p-5 shadow-2xl"
-            onClick={(e) => e.stopPropagation()} // ← モーダル内クリック防止
-          >
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-panel p-5 shadow-2xl">
             <h2 className="text-lg font-bold text-textMain">
               メッセージを通報
             </h2>

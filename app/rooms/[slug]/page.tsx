@@ -131,9 +131,7 @@ export default function RoomDetailPage() {
         <Link href="/" className="text-xs text-accent">
           ← ルーム一覧へ
         </Link>
-        <h1 className="mt-1 text-xl font-bold">
-          {room?.name ?? 'ルーム'}
-        </h1>
+        <h1 className="mt-1 text-xl font-bold">{room?.name ?? 'ルーム'}</h1>
       </header>
 
       {loading ? (
@@ -193,7 +191,10 @@ export default function RoomDetailPage() {
 
                   <div className="mt-1 flex items-center gap-2 text-[11px] text-textSub">
                     <span>{formatTime(msg.created_at)}</span>
-                    <ReportButton messageId={msg.id} />
+                    <ReportButton
+                      messageId={msg.id}
+                      reportedProfileId={msg.profile_id}
+                    />
                   </div>
                 </div>
               </article>

@@ -26,6 +26,22 @@ export function MessageInput({ roomId }: Props) {
         throw new Error('ログイン情報が見つかりません。');
       }
 
+      const { data: myProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('is_suspended, is_banned')
+        .eq('id', profileId)
+        .single();
+
+      if (profileError) throw profileError;
+
+      if (myProfile?.is_banned) {
+        throw new Error('このアカウントは利用停止されています。');
+      }
+
+      if (myProfile?.is_suspended) {
+        throw new Error('このアカウントは現在投稿停止中です。');
+      }
+
       const { error } = await supabase.from('messages').insert({
         room_id: roomId,
         profile_id: profileId,
