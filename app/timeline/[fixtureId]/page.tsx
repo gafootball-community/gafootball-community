@@ -75,22 +75,6 @@ function statusClass(status: Fixture['status']) {
   return 'border border-accent/20 bg-accent/15 text-accent';
 }
 
-function TeamBadge({
-  shortName,
-  fallback,
-}: {
-  shortName: string | null;
-  fallback: string;
-}) {
-  const label = (shortName || fallback).slice(0, 3).toUpperCase();
-
-  return (
-    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-xs font-bold text-white">
-      {label}
-    </div>
-  );
-}
-
 function TeamName({
   name,
   align = 'left',
@@ -99,15 +83,19 @@ function TeamName({
   align?: 'left' | 'right';
 }) {
   return (
-    <div className={align === 'right' ? 'min-w-0 text-right' : 'min-w-0'}>
-      <p
-        className={`truncate text-sm font-semibold text-white ${
+    <div
+      className={`min-w-0 overflow-x-auto scrollbar-none ${
+        align === 'right' ? 'text-right' : 'text-left'
+      }`}
+    >
+      <div
+        className={`inline-block min-w-full whitespace-nowrap text-sm font-semibold text-white ${
           align === 'right' ? 'text-right' : 'text-left'
         }`}
         title={name}
       >
         {name}
-      </p>
+      </div>
     </div>
   );
 }
@@ -137,6 +125,7 @@ export default function TimelineDetailPage() {
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
   const [myId, setMyId] = useState<string | null>(null);
+  const [reportingId, setReportingId] = useState<string | null>(null);
 
   const fetchTimeline = async () => {
     const { data: fixtureData, error: fixtureError } = await supabase
@@ -303,6 +292,36 @@ export default function TimelineDetailPage() {
     }
   };
 
+  const reportPost = async (postId: string) => {
+    const confirmed = window.confirm('この投稿を通報しますか？');
+    if (!confirmed) return;
+
+    setReportingId(postId);
+
+    try {
+      const reporterId = await currentUserId();
+
+      if (!reporterId) {
+        throw new Error('ログイン情報が見つかりません。');
+      }
+
+      const { error } = await supabase.from('timeline_post_reports').insert({
+        post_id: postId,
+        reporter_profile_id: reporterId,
+      });
+
+      if (error) throw error;
+
+      window.alert('通報を受け付けました。');
+    } catch (e) {
+      window.alert(
+        e instanceof Error ? e.message : '通報に失敗しました。'
+      );
+    } finally {
+      setReportingId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),rgba(4,8,7,0.98)_38%,rgba(1,3,2,1)_100%)] pb-36 text-textMain">
       <div className="mx-auto max-w-3xl px-4 pt-4">
@@ -330,11 +349,7 @@ export default function TimelineDetailPage() {
               </div>
 
               <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                <div className="flex min-w-0 items-center gap-3">
-                  <TeamBadge
-                    shortName={fixture.home_team_short}
-                    fallback={fixture.home_team}
-                  />
+                <div className="min-w-0">
                   <TeamName name={fixture.home_team} />
                 </div>
 
@@ -346,12 +361,8 @@ export default function TimelineDetailPage() {
                   </div>
                 </div>
 
-                <div className="flex min-w-0 items-center justify-end gap-3">
+                <div className="min-w-0">
                   <TeamName name={fixture.away_team} align="right" />
-                  <TeamBadge
-                    shortName={fixture.away_team_short}
-                    fallback={fixture.away_team}
-                  />
                 </div>
               </div>
 
@@ -452,6 +463,17 @@ export default function TimelineDetailPage() {
                               返信
                             </button>
 
+                            {!mine && (
+                              <button
+                                type="button"
+                                onClick={() => void reportPost(post.id)}
+                                disabled={reportingId === post.id}
+                                className="text-[11px] text-yellow-300 transition hover:text-yellow-200 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {reportingId === post.id ? '通報中...' : '通報'}
+                              </button>
+                            )}
+
                             {mine && (
                               <>
                                 <span className="text-[11px] text-accent">
@@ -491,7 +513,7 @@ export default function TimelineDetailPage() {
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
                   placeholder="この試合について投稿する"
-                  className="h-10 flex-1 rounded-full border border-white/10 bg-panelSoft px-4 text-sm text-textMain placeholder:text-textSub focus:border-accent focus:outline-none"
+                  className="h-10 flex-1 rounded-full border border-white/10 bg-panelSoft px-4 text-base text-textMain placeholder:text-textSub focus:border-accent focus:outline-none"
                   maxLength={280}
                   autoComplete="off"
                   autoCorrect="off"
