@@ -21,6 +21,12 @@ type Fixture = {
   away_score: number;
 };
 
+type TimelineProfile = {
+  id: string;
+  nickname: string | null;
+  avatar_url: string | null;
+};
+
 type TimelinePost = {
   id: string;
   fixture_id: string;
@@ -32,12 +38,10 @@ type TimelinePost = {
   expires_at: string;
   is_hidden: boolean;
   is_deleted: boolean;
-  profiles?: {
-    id: string;
-    nickname: string | null;
-    avatar_url: string | null;
-  } | null;
+  profiles?: TimelineProfile | null;
 };
+
+type TimelinePostRow = Omit<TimelinePost, 'profiles'>;
 
 function formatKickoff(date: string) {
   return new Intl.DateTimeFormat('ja-JP', {
@@ -113,6 +117,21 @@ function getTimelineRemainingText(targetDate: string | null) {
 
   if (hours <= 0) return `あと${minutes}分で削除`;
   return `あと${hours}時間${minutes}分で削除`;
+}
+
+async function fetchPostWithProfile(postId: string): Promise<TimelinePost | null> {
+  const { data, error } = await supabase
+    .from('timeline_posts')
+    .select('*, profiles:profile_id (id, nickname, avatar_url)')
+    .eq('id', postId)
+    .single();
+
+  if (error) {
+    console.error('fetchPostWithProfile error:', error);
+    return null;
+  }
+
+  return (data ?? null) as TimelinePost | null;
 }
 
 export default function TimelineDetailPage() {
@@ -196,22 +215,60 @@ export default function TimelineDetailPage() {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'timeline_posts',
           filter: `fixture_id=eq.${fixtureId}`,
         },
-        async () => {
-          const { data } = await supabase
-            .from('timeline_posts')
-            .select('*, profiles:profile_id (id, nickname, avatar_url)')
-            .eq('fixture_id', fixtureId)
-            .order('created_at', { ascending: false });
+        async (payload) => {
+          const newRow = payload.new as TimelinePostRow;
+          const hydrated = await fetchPostWithProfile(newRow.id);
 
-          setPosts((data ?? []) as TimelinePost[]);
+          if (!hydrated) return;
+
+          setPosts((prev) => {
+            const exists = prev.some((post) => post.id === hydrated.id);
+            if (exists) return prev;
+            return [hydrated, ...prev];
+          });
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'timeline_posts',
+          filter: `fixture_id=eq.${fixtureId}`,
+        },
+        async (payload) => {
+          const updatedRow = payload.new as TimelinePostRow;
+          const hydrated = await fetchPostWithProfile(updatedRow.id);
+
+          setPosts((prev) =>
+            prev.map((post) => {
+              if (post.id !== updatedRow.id) return post;
+              return hydrated ?? { ...post, ...updatedRow };
+            })
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'timeline_posts',
+          filter: `fixture_id=eq.${fixtureId}`,
+        },
+        (payload) => {
+          const deletedRow = payload.old as TimelinePostRow;
+          setPosts((prev) => prev.filter((post) => post.id !== deletedRow.id));
+        }
+      )
+      .subscribe((status) => {
+        console.log('timeline realtime status:', status);
+      });
 
     return () => {
       void supabase.removeChannel(channel);
