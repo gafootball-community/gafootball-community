@@ -9,11 +9,28 @@ import { ReportButton } from '@/components/report-button';
 import { supabase } from '@/lib/supabase';
 import type { Message, Room } from '@/lib/types';
 
+type MessageRow = Omit<Message, 'profiles'>;
+
 function formatTime(date: string) {
   return new Intl.DateTimeFormat('ja-JP', {
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(date));
+}
+
+async function fetchMessageWithProfile(messageId: string): Promise<Message | null> {
+  const { data, error } = await supabase
+    .from('messages')
+    .select('*, profiles:profile_id (id, nickname, avatar_url)')
+    .eq('id', messageId)
+    .single();
+
+  if (error) {
+    console.error('fetchMessageWithProfile error:', error);
+    return null;
+  }
+
+  return (data ?? null) as Message | null;
 }
 
 export default function RoomDetailPage() {
@@ -82,23 +99,66 @@ export default function RoomDetailPage() {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'INSERT',
           schema: 'public',
           table: 'messages',
           filter: `room_id=eq.${room.id}`,
         },
-        async () => {
-          const { data } = await supabase
-            .from('messages')
-            .select('*, profiles:profile_id (id, nickname, avatar_url)')
-            .eq('room_id', room.id)
-            .order('created_at', { ascending: true })
-            .limit(200);
+        async (payload) => {
+          const newRow = payload.new as MessageRow;
+          const hydrated = await fetchMessageWithProfile(newRow.id);
 
-          setMessages((data ?? []) as Message[]);
+          if (!hydrated) return;
+
+          setMessages((prev) => {
+            const exists = prev.some((msg) => msg.id === hydrated.id);
+            if (exists) return prev;
+
+            const next = [...prev, hydrated];
+            next.sort(
+              (a, b) =>
+                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            );
+            return next.slice(-200);
+          });
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `room_id=eq.${room.id}`,
+        },
+        async (payload) => {
+          const updatedRow = payload.new as MessageRow;
+          const hydrated = await fetchMessageWithProfile(updatedRow.id);
+
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id !== updatedRow.id) return msg;
+              return hydrated ?? { ...msg, ...updatedRow };
+            })
+          );
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'messages',
+          filter: `room_id=eq.${room.id}`,
+        },
+        (payload) => {
+          const deletedRow = payload.old as MessageRow;
+          setMessages((prev) => prev.filter((msg) => msg.id !== deletedRow.id));
+        }
+      )
+      .subscribe((status) => {
+        console.log('room realtime status:', status);
+      });
 
     return () => {
       void supabase.removeChannel(channel);
