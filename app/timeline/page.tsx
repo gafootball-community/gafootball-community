@@ -59,7 +59,7 @@ function TeamName({
         align === 'right' ? 'text-right' : 'text-left'
       }`}
     >
-      <div className="overflow-x-auto whitespace-nowrap scrollbar-none">
+      <div className="no-scrollbar overflow-x-auto whitespace-nowrap">
         <p className="inline-block text-xs font-semibold text-white">
           {name}
         </p>

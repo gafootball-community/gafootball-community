@@ -1,10 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { currentUserId } from '@/lib/auth';
+import { TimelineHeader } from '@/components/timeline/TimelineHeader';
+import { TimelinePostCard } from '@/components/timeline/TimelinePostCard';
+import { TimelineComposer } from '@/components/timeline/TimelineComposer';
 
 type Fixture = {
   id: string;
@@ -39,86 +49,17 @@ type TimelinePost = {
   is_hidden: boolean;
   is_deleted: boolean;
   profiles?: TimelineProfile | null;
+  like_count?: number;
+  liked_by_me?: boolean;
 };
 
-type TimelinePostRow = Omit<TimelinePost, 'profiles'>;
+type TimelinePostRow = Omit<
+  TimelinePost,
+  'profiles' | 'like_count' | 'liked_by_me'
+>;
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-
-function formatKickoff(date: string) {
-  return new Intl.DateTimeFormat('ja-JP', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(date));
-}
-
-function formatPostTime(date: string) {
-  return new Intl.DateTimeFormat('ja-JP', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(date));
-}
-
-function statusLabel(status: Fixture['status']) {
-  if (status === 'live') return 'LIVE';
-  if (status === 'finished') return '試合終了';
-  return '試合前';
-}
-
-function statusClass(status: Fixture['status']) {
-  if (status === 'live') {
-    return 'border border-red-400/20 bg-red-500/15 text-red-300';
-  }
-
-  if (status === 'finished') {
-    return 'border border-white/10 bg-white/10 text-textSub';
-  }
-
-  return 'border border-accent/20 bg-accent/15 text-accent';
-}
-
-function TeamName({
-  name,
-  align = 'left',
-}: {
-  name: string;
-  align?: 'left' | 'right';
-}) {
-  return (
-    <div
-      className={`min-w-0 overflow-x-auto scrollbar-none ${
-        align === 'right' ? 'text-right' : 'text-left'
-      }`}
-    >
-      <div
-        className={`inline-block min-w-full whitespace-nowrap text-sm font-semibold text-white ${
-          align === 'right' ? 'text-right' : 'text-left'
-        }`}
-        title={name}
-      >
-        {name}
-      </div>
-    </div>
-  );
-}
-
-function getTimelineRemainingText(targetDate: string | null) {
-  if (!targetDate) return 'まもなく削除';
-
-  const diff = new Date(targetDate).getTime() - Date.now();
-
-  if (diff <= 0) return 'まもなく削除';
-
-  const totalMinutes = Math.floor(diff / (1000 * 60));
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-
-  if (hours <= 0) return `あと${minutes}分で削除`;
-  return `あと${hours}時間${minutes}分で削除`;
-}
 
 function createStoragePath(profileId: string, file: File) {
   const extension = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
@@ -127,29 +68,54 @@ function createStoragePath(profileId: string, file: File) {
   return `${profileId}/${unique}.${safeExt}`;
 }
 
-function ImageAddIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      className="h-5 w-5"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect x="3.5" y="5" width="17" height="14" rx="3" />
-      <circle cx="9" cy="10" r="1.4" fill="currentColor" stroke="none" />
-      <path d="M20.5 15l-4.5-4.5-5.5 5.5" />
-      <path d="M13 13.5l1.5-1.5 3 3" />
-      <path d="M12 3v4" />
-      <path d="M10 5h4" />
-    </svg>
-  );
+async function attachLikesToPosts(
+  posts: TimelinePost[],
+  myId: string | null
+): Promise<TimelinePost[]> {
+  if (posts.length === 0) return [];
+
+  const postIds = posts.map((post) => post.id);
+
+  const { data: likeRows, error: likeError } = await supabase
+    .from('timeline_likes')
+    .select('post_id')
+    .in('post_id', postIds);
+
+  if (likeError) throw likeError;
+
+  const countMap = new Map<string, number>();
+  for (const row of likeRows ?? []) {
+    const postId = (row as { post_id: string }).post_id;
+    countMap.set(postId, (countMap.get(postId) ?? 0) + 1);
+  }
+
+  const likedSet = new Set<string>();
+
+  if (myId) {
+    const { data: myLikes, error: myLikesError } = await supabase
+      .from('timeline_likes')
+      .select('post_id')
+      .eq('profile_id', myId)
+      .in('post_id', postIds);
+
+    if (myLikesError) throw myLikesError;
+
+    for (const row of myLikes ?? []) {
+      likedSet.add((row as { post_id: string }).post_id);
+    }
+  }
+
+  return posts.map((post) => ({
+    ...post,
+    like_count: countMap.get(post.id) ?? 0,
+    liked_by_me: likedSet.has(post.id),
+  }));
 }
 
-async function fetchPostWithProfile(postId: string): Promise<TimelinePost | null> {
+async function fetchPostWithProfile(
+  postId: string,
+  myId: string | null
+): Promise<TimelinePost | null> {
   const { data, error } = await supabase
     .from('timeline_posts')
     .select('*, profiles:profile_id (id, nickname, avatar_url)')
@@ -161,7 +127,12 @@ async function fetchPostWithProfile(postId: string): Promise<TimelinePost | null
     return null;
   }
 
-  return (data ?? null) as TimelinePost | null;
+  const hydrated = await attachLikesToPosts(
+    [(data ?? null) as TimelinePost].filter(Boolean) as TimelinePost[],
+    myId
+  );
+
+  return hydrated[0] ?? null;
 }
 
 export default function TimelineDetailPage() {
@@ -171,11 +142,16 @@ export default function TimelineDetailPage() {
   const [fixture, setFixture] = useState<Fixture | null>(null);
   const [posts, setPosts] = useState<TimelinePost[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
+
   const [myId, setMyId] = useState<string | null>(null);
   const [myProfile, setMyProfile] = useState<TimelineProfile | null>(null);
+
   const [reportingId, setReportingId] = useState<string | null>(null);
+  const [likingId, setLikingId] = useState<string | null>(null);
+  const [animatingLikeId, setAnimatingLikeId] = useState<string | null>(null);
 
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -196,6 +172,29 @@ export default function TimelineDetailPage() {
       URL.revokeObjectURL(objectUrl);
     };
   }, [selectedImage]);
+
+  useEffect(() => {
+    if (!modalImage) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [modalImage]);
+
+  const refreshOnePost = useCallback(
+    async (postId: string) => {
+      const refreshed = await fetchPostWithProfile(postId, myId);
+      if (!refreshed) return;
+
+      setPosts((prev) =>
+        prev.map((post) => (post.id === postId ? refreshed : post))
+      );
+    },
+    [myId]
+  );
 
   useEffect(() => {
     const init = async () => {
@@ -250,8 +249,13 @@ export default function TimelineDetailPage() {
 
         if (postError) throw postError;
 
+        const hydratedPosts = await attachLikesToPosts(
+          (postData ?? []) as TimelinePost[],
+          user.id
+        );
+
         setFixture(nextFixture);
-        setPosts((postData ?? []) as TimelinePost[]);
+        setPosts(hydratedPosts);
       } catch (e) {
         window.alert(
           e instanceof Error
@@ -280,7 +284,7 @@ export default function TimelineDetailPage() {
         },
         async (payload) => {
           const newRow = payload.new as TimelinePostRow;
-          const hydrated = await fetchPostWithProfile(newRow.id);
+          const hydrated = await fetchPostWithProfile(newRow.id, myId);
 
           if (!hydrated) return;
 
@@ -301,7 +305,7 @@ export default function TimelineDetailPage() {
         },
         async (payload) => {
           const updatedRow = payload.new as TimelinePostRow;
-          const hydrated = await fetchPostWithProfile(updatedRow.id);
+          const hydrated = await fetchPostWithProfile(updatedRow.id, myId);
 
           setPosts((prev) =>
             prev.map((post) => {
@@ -324,6 +328,24 @@ export default function TimelineDetailPage() {
           setPosts((prev) => prev.filter((post) => post.id !== deletedRow.id));
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'timeline_likes',
+        },
+        async (payload) => {
+          const likeRow = (payload.new ?? payload.old) as
+            | { post_id?: string }
+            | null;
+
+          const changedPostId = likeRow?.post_id;
+          if (!changedPostId) return;
+
+          void refreshOnePost(changedPostId);
+        }
+      )
       .subscribe((status) => {
         console.log('timeline realtime status:', status);
       });
@@ -331,7 +353,7 @@ export default function TimelineDetailPage() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [fixtureId]);
+  }, [fixtureId, myId, refreshOnePost]);
 
   const visiblePosts = useMemo(
     () =>
@@ -382,7 +404,6 @@ export default function TimelineDetailPage() {
     e.preventDefault();
 
     const content = value.trim();
-
     if ((!content && !selectedImage) || sending) return;
 
     setSending(true);
@@ -494,6 +515,79 @@ export default function TimelineDetailPage() {
     }
   };
 
+  const toggleLike = async (post: TimelinePost) => {
+    if (!myId || likingId) return;
+
+    setLikingId(post.id);
+
+    const previousLiked = !!post.liked_by_me;
+    const previousCount = post.like_count ?? 0;
+
+    if (!previousLiked) {
+      setAnimatingLikeId(post.id);
+      window.setTimeout(() => {
+        setAnimatingLikeId((current) =>
+          current === post.id ? null : current
+        );
+      }, 520);
+    }
+
+    setPosts((prev) =>
+      prev.map((item) =>
+        item.id === post.id
+          ? {
+              ...item,
+              liked_by_me: !previousLiked,
+              like_count: previousLiked
+                ? Math.max(0, previousCount - 1)
+                : previousCount + 1,
+            }
+          : item
+      )
+    );
+
+    try {
+      if (previousLiked) {
+        const { error } = await supabase
+          .from('timeline_likes')
+          .delete()
+          .eq('post_id', post.id)
+          .eq('profile_id', myId);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('timeline_likes').insert({
+          post_id: post.id,
+          profile_id: myId,
+        });
+
+        if (error) throw error;
+      }
+    } catch (e) {
+      setPosts((prev) =>
+        prev.map((item) =>
+          item.id === post.id
+            ? {
+                ...item,
+                liked_by_me: previousLiked,
+                like_count: previousCount,
+              }
+            : item
+        )
+      );
+
+      setAnimatingLikeId((current) =>
+        current === post.id ? null : current
+      );
+
+      window.alert(
+        e instanceof Error ? e.message : 'いいねに失敗しました。'
+      );
+    } finally {
+      setLikingId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),rgba(4,8,7,0.98)_38%,rgba(1,3,2,1)_100%)] pb-44 text-textMain">
       <div className="mx-auto max-w-3xl px-4 pt-4">
@@ -505,52 +599,7 @@ export default function TimelineDetailPage() {
           <p className="mt-6 text-sm text-textSub">読み込み中...</p>
         ) : fixture ? (
           <>
-            <section className="sticky top-0 z-20 mt-4 rounded-3xl border border-white/10 bg-[linear-gradient(135deg,rgba(10,18,14,0.96),rgba(4,10,8,0.98))] p-4 shadow-[0_0_30px_rgba(16,185,129,0.08)] backdrop-blur">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="truncate text-xs font-medium text-textSub">
-                  {fixture.league_name}
-                </p>
-
-                <span
-                  className={`rounded-full px-3 py-1 text-[11px] font-semibold ${statusClass(
-                    fixture.status
-                  )}`}
-                >
-                  {statusLabel(fixture.status)}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                <div className="min-w-0">
-                  <TeamName name={fixture.home_team} />
-                </div>
-
-                <div className="shrink-0 text-center">
-                  <div className="min-w-[82px] rounded-2xl border border-accent/20 bg-accent/10 px-4 py-2">
-                    <p className="text-xl font-bold tracking-wide text-white">
-                      {fixture.home_score} - {fixture.away_score}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="min-w-0">
-                  <TeamName name={fixture.away_team} align="right" />
-                </div>
-              </div>
-
-              <div className="mt-4 flex items-center justify-between gap-3 text-xs">
-                <p className="text-textSub">
-                  キックオフ: {formatKickoff(fixture.kickoff_at)}
-                </p>
-                <p className="font-medium text-accent">
-                  このタイムラインは24時間後に削除されます
-                </p>
-              </div>
-
-              <div className="mt-2 text-right text-[11px] text-textSub">
-                {getTimelineRemainingText(fixture.expires_at)}
-              </div>
-            </section>
+            <TimelineHeader fixture={fixture} />
 
             <section className="mt-5 space-y-4">
               {visiblePosts.length === 0 ? (
@@ -558,235 +607,39 @@ export default function TimelineDetailPage() {
                   まだ投稿はありません。最初の投稿をしてみよう。
                 </div>
               ) : (
-                visiblePosts.map((post) => {
-                  const mine = myId === post.profile_id;
-
-                  return (
-                    <article
-                      key={post.id}
-                      className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(14,18,16,0.95),rgba(8,12,10,0.98))] p-4 shadow-[0_0_20px_rgba(16,185,129,0.04)]"
-                    >
-                      <div className="flex items-start gap-3">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            router.push(`/profile/${post.profile_id}`)
-                          }
-                          className="shrink-0"
-                        >
-                          {post.profiles?.avatar_url ? (
-                            <img
-                              src={post.profiles.avatar_url}
-                              alt={post.profiles.nickname ?? 'avatar'}
-                              className="h-10 w-10 rounded-full border border-white/10 object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-panelSoft text-xs">
-                              👤
-                            </div>
-                          )}
-                        </button>
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                router.push(`/profile/${post.profile_id}`)
-                              }
-                              className="truncate text-left text-sm font-semibold text-white"
-                            >
-                              {post.profiles?.nickname ?? '匿名ユーザー'}
-                            </button>
-
-                            <div className="flex items-center gap-2 text-[11px] text-textSub">
-                              <span>{formatPostTime(post.created_at)}</span>
-                            </div>
-                          </div>
-
-                          {post.content && (
-                            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-textMain">
-                              {post.content}
-                            </p>
-                          )}
-
-                          {post.image_url && (
-                            <div className="mt-3 overflow-hidden rounded-2xl border border-white/10">
-                              <button
-                                type="button"
-                                onClick={() => setModalImage(post.image_url)}
-                                className="block w-full"
-                              >
-                                <img
-                                  src={post.image_url}
-                                  alt="timeline post"
-                                  className="max-h-[360px] w-full object-cover"
-                                />
-                              </button>
-                            </div>
-                          )}
-
-                          <div className="mt-4 flex items-center gap-4 text-xs text-textSub">
-                            <button
-                              type="button"
-                              className="transition hover:text-textMain"
-                            >
-                              ⚽ いいね
-                            </button>
-
-                            <button
-                              type="button"
-                              className="transition hover:text-textMain"
-                            >
-                              返信
-                            </button>
-
-                            {!mine && (
-                              <button
-                                type="button"
-                                onClick={() => void reportPost(post.id)}
-                                disabled={reportingId === post.id}
-                                className="text-[11px] text-yellow-300 transition hover:text-yellow-200 disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {reportingId === post.id ? '通報中...' : '通報'}
-                              </button>
-                            )}
-
-                            {mine && (
-                              <>
-                                <span className="text-[11px] text-accent">
-                                  あなたの投稿
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => void deletePost(post.id)}
-                                  className="text-[11px] text-red-300 transition hover:text-red-200"
-                                >
-                                  削除
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })
+                visiblePosts.map((post) => (
+                  <TimelinePostCard
+                    key={post.id}
+                    post={post}
+                    mine={myId === post.profile_id}
+                    reporting={reportingId === post.id}
+                    liking={likingId === post.id}
+                    animateLike={animatingLikeId === post.id}
+                    onProfileClick={(profileId) =>
+                      router.push(`/profile/${profileId}`)
+                    }
+                    onImageClick={(imageUrl) => setModalImage(imageUrl)}
+                    onReport={(postId) => void reportPost(postId)}
+                    onDelete={(postId) => void deletePost(postId)}
+                    onLike={(targetPost) => void toggleLike(targetPost)}
+                  />
+                ))
               )}
             </section>
 
-            <form
+            <TimelineComposer
+              value={value}
+              sending={sending}
+              previewUrl={previewUrl}
+              selectedImage={selectedImage}
+              myProfile={myProfile}
+              fileInputRef={fileInputRef}
               onSubmit={sendPost}
-              className="fixed inset-x-0 bottom-[calc(4.13rem+env(safe-area-inset-bottom))] z-30 border-t border-white/10 bg-[rgba(5,10,8,0.94)] px-3 py-2 backdrop-blur"
-            >
-              <div className="mx-auto max-w-2xl px-2">
-                {previewUrl && (
-                  <div className="mb-3 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(14,18,16,0.95),rgba(8,12,10,0.98))] p-4 shadow-[0_0_20px_rgba(16,185,129,0.04)]">
-                    <div className="flex items-start gap-3">
-                      {myProfile?.avatar_url ? (
-                        <img
-                          src={myProfile.avatar_url}
-                          alt={myProfile.nickname ?? 'avatar'}
-                          className="h-10 w-10 rounded-full border border-white/10 object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-panelSoft text-xs">
-                          👤
-                        </div>
-                      )}
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-left text-sm font-semibold text-white">
-                            {myProfile?.nickname ?? 'あなた'}
-                          </p>
-
-                          <button
-                            type="button"
-                            onClick={clearSelectedImage}
-                            className="rounded-full bg-black/60 px-2 py-1 text-[11px] text-white transition hover:bg-black/80"
-                          >
-                            ×
-                          </button>
-                        </div>
-
-                        {value.trim() && (
-                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-textMain">
-                            {value}
-                          </p>
-                        )}
-
-                        <div className="mt-3 overflow-hidden rounded-2xl border border-white/10">
-                          <button
-                            type="button"
-                            onClick={handlePickImage}
-                            className="block w-full"
-                          >
-                            <img
-                              src={previewUrl}
-                              alt="preview"
-                              className="max-h-[360px] w-full object-cover"
-                            />
-                          </button>
-                        </div>
-
-                        <div className="mt-2 text-[11px] text-textSub">
-                          画像をタップで差し替え
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handlePickImage}
-                    className="group flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-panelSoft text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition hover:border-accent/30 hover:bg-white/10"
-                    aria-label="画像を選択"
-                  >
-                    {previewUrl ? (
-                      <img
-                        src={previewUrl}
-                        alt="selected"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(20,28,24,0.95),rgba(12,18,15,0.98))] text-textSub transition group-hover:text-white">
-                        <ImageAddIcon />
-                      </div>
-                    )}
-                  </button>
-
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    className="hidden"
-                    onChange={handleImageChange}
-                  />
-
-                  <input
-                    value={value}
-                    onChange={(e) => setValue(e.target.value)}
-                    placeholder="この試合について投稿する"
-                    className="h-10 flex-1 rounded-full border border-white/10 bg-panelSoft px-4 text-base text-textMain placeholder:text-textSub focus:border-accent focus:outline-none"
-                    maxLength={280}
-                    autoComplete="off"
-                    autoCorrect="off"
-                    spellCheck={false}
-                  />
-
-                  <button
-                    type="submit"
-                    disabled={sending || (!value.trim() && !selectedImage)}
-                    className="h-10 rounded-full bg-accent px-4 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {sending ? '送信中' : '投稿'}
-                  </button>
-                </div>
-              </div>
-            </form>
+              onChangeValue={setValue}
+              onPickImage={handlePickImage}
+              onChangeImage={handleImageChange}
+              onClearImage={clearSelectedImage}
+            />
 
             {modalImage && (
               <div
