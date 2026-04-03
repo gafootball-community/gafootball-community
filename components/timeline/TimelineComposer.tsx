@@ -68,10 +68,10 @@ export function TimelineComposer({
                 <img
                   src={myProfile.avatar_url}
                   alt={myProfile.nickname ?? 'avatar'}
-                  className="h-10 w-10 rounded-full border border-white/10 object-cover"
+                  className="h-10 w-10 shrink-0 rounded-full border border-white/10 object-cover"
                 />
               ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-panelSoft text-xs">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-panelSoft text-xs">
                   👤
                 </div>
               )}
@@ -85,7 +85,8 @@ export function TimelineComposer({
                   <button
                     type="button"
                     onClick={onClearImage}
-                    className="rounded-full bg-black/60 px-2 py-1 text-[11px] text-white transition hover:bg-black/80"
+                    className="shrink-0 rounded-full bg-black/60 px-2 py-1 text-[11px] text-white transition hover:bg-black/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                    aria-label="画像を削除"
                   >
                     ×
                   </button>
@@ -101,7 +102,7 @@ export function TimelineComposer({
                   <button
                     type="button"
                     onClick={onPickImage}
-                    className="block w-full"
+                    className="block w-full transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                   >
                     <img
                       src={previewUrl}
@@ -123,7 +124,7 @@ export function TimelineComposer({
           <button
             type="button"
             onClick={onPickImage}
-            className="group flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-panelSoft text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition hover:border-accent/30 hover:bg-white/10"
+            className="group flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-panelSoft text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition hover:border-accent/30 hover:bg-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
             aria-label="画像を選択"
           >
             {previewUrl ? (
@@ -147,21 +148,23 @@ export function TimelineComposer({
             onChange={onChangeImage}
           />
 
-          <input
-            value={value}
-            onChange={(e) => onChangeValue(e.target.value)}
-            placeholder="この試合について投稿する"
-            className="h-10 flex-1 rounded-full border border-white/10 bg-panelSoft px-4 text-base text-textMain placeholder:text-textSub focus:border-accent focus:outline-none"
-            maxLength={280}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-          />
+          <div className="min-w-0 flex-1">
+            <input
+              value={value}
+              onChange={(e) => onChangeValue(e.target.value)}
+              placeholder="この試合について投稿する"
+              className="h-10 w-full min-w-0 rounded-full border border-white/10 bg-panelSoft px-4 text-base text-textMain placeholder:text-textSub focus:border-accent focus:outline-none"
+              maxLength={280}
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+          </div>
 
           <button
             type="submit"
             disabled={sending || (!value.trim() && !selectedImage)}
-            className="h-10 rounded-full bg-accent px-4 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-10 shrink-0 whitespace-nowrap rounded-full bg-accent px-4 text-sm font-semibold text-black transition disabled:cursor-not-allowed disabled:opacity-50"
           >
             {sending ? '送信中' : '投稿'}
           </button>
