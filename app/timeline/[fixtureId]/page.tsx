@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { currentUserId } from '@/lib/auth';
@@ -42,6 +42,9 @@ type TimelinePost = {
 };
 
 type TimelinePostRow = Omit<TimelinePost, 'profiles'>;
+
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 function formatKickoff(date: string) {
   return new Intl.DateTimeFormat('ja-JP', {
@@ -117,6 +120,35 @@ function getTimelineRemainingText(targetDate: string | null) {
   return `あと${hours}時間${minutes}分で削除`;
 }
 
+function createStoragePath(profileId: string, file: File) {
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
+  const safeExt = extension === 'jpeg' ? 'jpg' : extension;
+  const unique = `${Date.now()}-${crypto.randomUUID()}`;
+  return `${profileId}/${unique}.${safeExt}`;
+}
+
+function ImageAddIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className="h-5 w-5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3.5" y="5" width="17" height="14" rx="3" />
+      <circle cx="9" cy="10" r="1.4" fill="currentColor" stroke="none" />
+      <path d="M20.5 15l-4.5-4.5-5.5 5.5" />
+      <path d="M13 13.5l1.5-1.5 3 3" />
+      <path d="M12 3v4" />
+      <path d="M10 5h4" />
+    </svg>
+  );
+}
+
 async function fetchPostWithProfile(postId: string): Promise<TimelinePost | null> {
   const { data, error } = await supabase
     .from('timeline_posts')
@@ -142,38 +174,28 @@ export default function TimelineDetailPage() {
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
   const [myId, setMyId] = useState<string | null>(null);
+  const [myProfile, setMyProfile] = useState<TimelineProfile | null>(null);
   const [reportingId, setReportingId] = useState<string | null>(null);
 
-  const fetchTimeline = async () => {
-    const { data: fixtureData, error: fixtureError } = await supabase
-      .from('fixtures')
-      .select('*')
-      .eq('id', fixtureId)
-      .single();
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [modalImage, setModalImage] = useState<string | null>(null);
 
-    if (fixtureError) throw fixtureError;
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-    const nextFixture = fixtureData as Fixture;
-
-    if (
-      nextFixture.expires_at &&
-      new Date(nextFixture.expires_at).getTime() <= Date.now()
-    ) {
-      router.replace('/timeline');
+  useEffect(() => {
+    if (!selectedImage) {
+      setPreviewUrl(null);
       return;
     }
 
-    const { data: postData, error: postError } = await supabase
-      .from('timeline_posts')
-      .select('*, profiles:profile_id (id, nickname, avatar_url)')
-      .eq('fixture_id', fixtureId)
-      .order('created_at', { ascending: false });
+    const objectUrl = URL.createObjectURL(selectedImage);
+    setPreviewUrl(objectUrl);
 
-    if (postError) throw postError;
-
-    setFixture(nextFixture);
-    setPosts((postData ?? []) as TimelinePost[]);
-  };
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [selectedImage]);
 
   useEffect(() => {
     const init = async () => {
@@ -191,7 +213,45 @@ export default function TimelineDetailPage() {
         }
 
         setMyId(user.id);
-        await fetchTimeline();
+
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('id, nickname, avatar_url')
+          .eq('id', user.id)
+          .single();
+
+        if (profileError) throw profileError;
+
+        setMyProfile((profileData ?? null) as TimelineProfile | null);
+
+        const { data: fixtureData, error: fixtureError } = await supabase
+          .from('fixtures')
+          .select('*')
+          .eq('id', fixtureId)
+          .single();
+
+        if (fixtureError) throw fixtureError;
+
+        const nextFixture = fixtureData as Fixture;
+
+        if (
+          nextFixture.expires_at &&
+          new Date(nextFixture.expires_at).getTime() <= Date.now()
+        ) {
+          router.replace('/timeline');
+          return;
+        }
+
+        const { data: postData, error: postError } = await supabase
+          .from('timeline_posts')
+          .select('*, profiles:profile_id (id, nickname, avatar_url)')
+          .eq('fixture_id', fixtureId)
+          .order('created_at', { ascending: false });
+
+        if (postError) throw postError;
+
+        setFixture(nextFixture);
+        setPosts((postData ?? []) as TimelinePost[]);
       } catch (e) {
         window.alert(
           e instanceof Error
@@ -285,11 +345,45 @@ export default function TimelineDetailPage() {
     [posts, fixture]
   );
 
+  const handlePickImage = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+
+    if (!file) return;
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      window.alert('jpg / png / webp の画像のみ投稿できます。');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > MAX_IMAGE_SIZE) {
+      window.alert('画像サイズは5MB以下にしてください。');
+      e.target.value = '';
+      return;
+    }
+
+    setSelectedImage(file);
+  };
+
+  const clearSelectedImage = () => {
+    setSelectedImage(null);
+    setPreviewUrl(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const sendPost = async (e: FormEvent) => {
     e.preventDefault();
 
     const content = value.trim();
-    if (!content || sending) return;
+
+    if ((!content && !selectedImage) || sending) return;
 
     setSending(true);
 
@@ -304,16 +398,39 @@ export default function TimelineDetailPage() {
         ? fixture.expires_at
         : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
+      let imageUrl: string | null = null;
+
+      if (selectedImage) {
+        const storagePath = createStoragePath(profileId, selectedImage);
+
+        const { error: uploadError } = await supabase.storage
+          .from('timeline-images')
+          .upload(storagePath, selectedImage, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('timeline-images')
+          .getPublicUrl(storagePath);
+
+        imageUrl = publicUrlData.publicUrl;
+      }
+
       const { error } = await supabase.from('timeline_posts').insert({
         fixture_id: fixtureId,
         profile_id: profileId,
-        content,
+        content: content || null,
+        image_url: imageUrl,
         expires_at: expiresAt,
       });
 
       if (error) throw error;
 
       setValue('');
+      clearSelectedImage();
     } catch (e) {
       window.alert(
         e instanceof Error ? e.message : '投稿に失敗しました。'
@@ -378,7 +495,7 @@ export default function TimelineDetailPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),rgba(4,8,7,0.98)_38%,rgba(1,3,2,1)_100%)] pb-36 text-textMain">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),rgba(4,8,7,0.98)_38%,rgba(1,3,2,1)_100%)] pb-44 text-textMain">
       <div className="mx-auto max-w-3xl px-4 pt-4">
         <Link href="/timeline" className="text-xs text-accent">
           ← タイムライン一覧へ
@@ -495,11 +612,17 @@ export default function TimelineDetailPage() {
 
                           {post.image_url && (
                             <div className="mt-3 overflow-hidden rounded-2xl border border-white/10">
-                              <img
-                                src={post.image_url}
-                                alt="timeline post"
-                                className="max-h-[360px] w-full object-cover"
-                              />
+                              <button
+                                type="button"
+                                onClick={() => setModalImage(post.image_url)}
+                                className="block w-full"
+                              >
+                                <img
+                                  src={post.image_url}
+                                  alt="timeline post"
+                                  className="max-h-[360px] w-full object-cover"
+                                />
+                              </button>
                             </div>
                           )}
 
@@ -556,34 +679,152 @@ export default function TimelineDetailPage() {
               onSubmit={sendPost}
               className="fixed inset-x-0 bottom-[calc(4.13rem+env(safe-area-inset-bottom))] z-30 border-t border-white/10 bg-[rgba(5,10,8,0.94)] px-3 py-2 backdrop-blur"
             >
-              <div className="mx-auto flex max-w-2xl items-center gap-2 px-2">
-                <button
-                  type="button"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-panelSoft text-lg text-white transition hover:border-accent/30"
-                >
-                  ＋
-                </button>
+              <div className="mx-auto max-w-2xl px-2">
+                {previewUrl && (
+                  <div className="mb-3 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(14,18,16,0.95),rgba(8,12,10,0.98))] p-4 shadow-[0_0_20px_rgba(16,185,129,0.04)]">
+                    <div className="flex items-start gap-3">
+                      {myProfile?.avatar_url ? (
+                        <img
+                          src={myProfile.avatar_url}
+                          alt={myProfile.nickname ?? 'avatar'}
+                          className="h-10 w-10 rounded-full border border-white/10 object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-panelSoft text-xs">
+                          👤
+                        </div>
+                      )}
 
-                <input
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  placeholder="この試合について投稿する"
-                  className="h-10 flex-1 rounded-full border border-white/10 bg-panelSoft px-4 text-base text-textMain placeholder:text-textSub focus:border-accent focus:outline-none"
-                  maxLength={280}
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-left text-sm font-semibold text-white">
+                            {myProfile?.nickname ?? 'あなた'}
+                          </p>
 
-                <button
-                  type="submit"
-                  disabled={sending || value.trim().length === 0}
-                  className="h-10 rounded-full bg-accent px-4 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {sending ? '送信中' : '投稿'}
-                </button>
+                          <button
+                            type="button"
+                            onClick={clearSelectedImage}
+                            className="rounded-full bg-black/60 px-2 py-1 text-[11px] text-white transition hover:bg-black/80"
+                          >
+                            ×
+                          </button>
+                        </div>
+
+                        {value.trim() && (
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-textMain">
+                            {value}
+                          </p>
+                        )}
+
+                        <div className="mt-3 overflow-hidden rounded-2xl border border-white/10">
+                          <button
+                            type="button"
+                            onClick={handlePickImage}
+                            className="block w-full"
+                          >
+                            <img
+                              src={previewUrl}
+                              alt="preview"
+                              className="max-h-[360px] w-full object-cover"
+                            />
+                          </button>
+                        </div>
+
+                        <div className="mt-2 text-[11px] text-textSub">
+                          画像をタップで差し替え
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handlePickImage}
+                    className="group flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-panelSoft text-white shadow-[0_0_0_1px_rgba(255,255,255,0.02)] transition hover:border-accent/30 hover:bg-white/10"
+                    aria-label="画像を選択"
+                  >
+                    {previewUrl ? (
+                      <img
+                        src={previewUrl}
+                        alt="selected"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center rounded-full bg-[linear-gradient(180deg,rgba(20,28,24,0.95),rgba(12,18,15,0.98))] text-textSub transition group-hover:text-white">
+                        <ImageAddIcon />
+                      </div>
+                    )}
+                  </button>
+
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="hidden"
+                    onChange={handleImageChange}
+                  />
+
+                  <input
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                    placeholder="この試合について投稿する"
+                    className="h-10 flex-1 rounded-full border border-white/10 bg-panelSoft px-4 text-base text-textMain placeholder:text-textSub focus:border-accent focus:outline-none"
+                    maxLength={280}
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={sending || (!value.trim() && !selectedImage)}
+                    className="h-10 rounded-full bg-accent px-4 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {sending ? '送信中' : '投稿'}
+                  </button>
+                </div>
               </div>
             </form>
+
+            {modalImage && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 px-4"
+                onClick={() => setModalImage(null)}
+              >
+                <div
+                  className="relative w-full max-w-5xl"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setModalImage(null)}
+                    className="absolute right-2 top-2 z-10 rounded-full bg-black/70 px-3 py-1 text-sm text-white"
+                  >
+                    ×
+                  </button>
+
+                  <img
+                    src={modalImage}
+                    alt="expanded"
+                    className="max-h-[88vh] w-full rounded-2xl object-contain"
+                  />
+
+                  <div className="mt-3 flex justify-center">
+                    <a
+                      href={modalImage}
+                      download
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-white/10 bg-panelSoft px-4 py-2 text-sm text-white transition hover:border-accent/30"
+                    >
+                      画像を保存
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         ) : null}
       </div>
