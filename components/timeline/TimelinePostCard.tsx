@@ -85,7 +85,7 @@ export function TimelinePostCard({
               {post.profiles?.nickname ?? '匿名ユーザー'}
             </button>
 
-            <div className="flex items-center gap-2 text-[11px] text-textSub">
+            <div className="shrink-0 text-[11px] text-textSub">
               <span>{formatPostTime(post.created_at)}</span>
             </div>
           </div>
@@ -113,47 +113,52 @@ export function TimelinePostCard({
             </div>
           )}
 
-          <div className="mt-4 flex items-center gap-3 text-xs text-textSub">
-            <LikeButton
-              liked={!!post.liked_by_me}
-              count={post.like_count ?? 0}
-              disabled={liking}
-              animate={animateLike}
-              onClick={() => onLike(post)}
-            />
+          <div className="mt-4 flex items-center justify-between gap-3 text-xs text-textSub">
+            <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+              <LikeButton
+                liked={!!post.liked_by_me}
+                count={post.like_count ?? 0}
+                disabled={liking}
+                animate={animateLike}
+                onClick={() => onLike(post)}
+              />
 
-            <button
-              type="button"
-              className="rounded-full px-2.5 py-1.5 transition hover:bg-white/5 hover:text-textMain focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-            >
-              返信
-            </button>
-
-            {!mine && (
               <button
                 type="button"
-                onClick={() => onReport(post.id)}
-                disabled={reporting}
-                className="rounded-full px-2.5 py-1.5 text-[11px] text-yellow-300 transition hover:bg-white/5 hover:text-yellow-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/40 disabled:cursor-not-allowed disabled:opacity-50"
+                className="shrink-0 whitespace-nowrap rounded-full px-2 py-1.5 transition hover:bg-white/5 hover:text-textMain focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-2.5"
               >
-                {reporting ? '通報中...' : '通報'}
+                返信
               </button>
-            )}
+            </div>
 
-            {mine && (
-              <>
-                <span className="text-[11px] text-accent">
-                  あなたの投稿
-                </span>
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+              {!mine && (
                 <button
                   type="button"
-                  onClick={() => onDelete(post.id)}
-                  className="rounded-full px-2.5 py-1.5 text-[11px] text-red-300 transition hover:bg-white/5 hover:text-red-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300/40"
+                  onClick={() => onReport(post.id)}
+                  disabled={reporting}
+                  className="whitespace-nowrap rounded-full px-2 py-1.5 text-[11px] text-yellow-300 transition hover:bg-white/5 hover:text-yellow-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-300/40 disabled:cursor-not-allowed disabled:opacity-50 sm:px-2.5"
                 >
-                  削除
+                  {reporting ? '通報中...' : '通報'}
                 </button>
-              </>
-            )}
+              )}
+
+              {mine && (
+                <>
+                  <span className="whitespace-nowrap text-[11px] text-accent">
+                    あなたの投稿
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => onDelete(post.id)}
+                    className="whitespace-nowrap rounded-full px-2 py-1.5 text-[11px] text-red-300 transition hover:bg-white/5 hover:text-red-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300/40 sm:px-2.5"
+                  >
+                    削除
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
