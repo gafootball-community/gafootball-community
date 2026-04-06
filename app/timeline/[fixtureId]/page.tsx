@@ -5,7 +5,6 @@ import {
   FormEvent,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -185,6 +184,7 @@ export default function TimelineDetailPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [modalImage, setModalImage] = useState<string | null>(null);
+  const [replyToPost, setReplyToPost] = useState<TimelinePost | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -249,7 +249,7 @@ export default function TimelineDetailPage() {
       a.remove();
 
       window.URL.revokeObjectURL(blobUrl);
-    } catch (e) {
+    } catch {
       window.alert('保存に失敗しました。');
     }
   }, [modalImage]);
@@ -261,10 +261,12 @@ export default function TimelineDetailPage() {
 
     try {
       const lastPost = posts[posts.length - 1];
+      if (!lastPost) return;
+
       const olderPosts = await fetchPostsPage({
         fixtureId,
         myId,
-        beforeCreatedAt: lastPost?.created_at ?? null,
+        beforeCreatedAt: lastPost.created_at,
       });
 
       setPosts((prev) => {
@@ -438,16 +440,12 @@ export default function TimelineDetailPage() {
     };
   }, [fixtureId, myId, refreshOnePost]);
 
-  const visiblePosts = useMemo(
-    () =>
-      posts.filter(
-        (post) =>
-          !post.is_hidden &&
-          !post.is_deleted &&
-          (!fixture?.expires_at ||
-            new Date(fixture.expires_at).getTime() > Date.now())
-      ),
-    [posts, fixture]
+  const visiblePosts = posts.filter(
+    (post) =>
+      !post.is_hidden &&
+      !post.is_deleted &&
+      (!fixture?.expires_at ||
+        new Date(fixture.expires_at).getTime() > Date.now())
   );
 
   const handlePickImage = () => {
@@ -528,6 +526,7 @@ export default function TimelineDetailPage() {
         profile_id: profileId,
         content: content || null,
         image_url: imageUrl,
+        reply_to_id: replyToPost?.id ?? null,
         expires_at: expiresAt,
       });
 
@@ -535,6 +534,7 @@ export default function TimelineDetailPage() {
 
       setValue('');
       clearSelectedImage();
+      setReplyToPost(null);
     } catch (e) {
       window.alert(
         e instanceof Error ? e.message : '投稿に失敗しました。'
@@ -706,6 +706,7 @@ export default function TimelineDetailPage() {
                       onReport={(postId) => void reportPost(postId)}
                       onDelete={(postId) => void deletePost(postId)}
                       onLike={(targetPost) => void toggleLike(targetPost)}
+                      onReply={(targetPost) => setReplyToPost(targetPost)}
                     />
                   ))}
 
@@ -737,6 +738,8 @@ export default function TimelineDetailPage() {
               onPickImage={handlePickImage}
               onChangeImage={handleImageChange}
               onClearImage={clearSelectedImage}
+              replyToPost={replyToPost}
+              onClearReply={() => setReplyToPost(null)}
             />
 
             {modalImage && (

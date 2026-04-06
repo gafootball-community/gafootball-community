@@ -6,6 +6,13 @@ type TimelineProfile = {
   avatar_url: string | null;
 };
 
+type ReplyPost = {
+  id: string;
+  content: string | null;
+  image_url: string | null;
+  profiles?: TimelineProfile | null;
+};
+
 function ImageAddIcon() {
   return (
     <svg
@@ -35,11 +42,13 @@ type Props = {
   selectedImage: File | null;
   myProfile: TimelineProfile | null;
   fileInputRef: RefObject<HTMLInputElement | null>;
+  replyToPost: ReplyPost | null;
   onSubmit: (e: FormEvent) => void;
   onChangeValue: (value: string) => void;
   onPickImage: () => void;
   onChangeImage: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onClearImage: () => void;
+  onClearReply: () => void;
 };
 
 export function TimelineComposer({
@@ -49,18 +58,48 @@ export function TimelineComposer({
   selectedImage,
   myProfile,
   fileInputRef,
+  replyToPost,
   onSubmit,
   onChangeValue,
   onPickImage,
   onChangeImage,
   onClearImage,
+  onClearReply,
 }: Props) {
+  const replyPreviewText =
+    replyToPost?.content ||
+    (replyToPost?.image_url ? '画像付きの投稿' : '投稿');
+
   return (
     <form
       onSubmit={onSubmit}
       className="fixed inset-x-0 bottom-[calc(4.13rem+env(safe-area-inset-bottom))] z-30 border-t border-white/10 bg-[rgba(5,10,8,0.94)] px-3 py-2 backdrop-blur"
     >
       <div className="mx-auto max-w-2xl px-2">
+        {replyToPost && (
+          <div className="mb-3 rounded-2xl border border-accent/20 bg-accent/10 p-3 shadow-[0_0_20px_rgba(16,185,129,0.04)]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="truncate text-[11px] font-semibold text-accent">
+                  {replyToPost.profiles?.nickname ?? '匿名ユーザー'} への返信
+                </p>
+                <p className="mt-1 line-clamp-2 text-xs leading-5 text-textSub">
+                  {replyPreviewText}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={onClearReply}
+                className="shrink-0 rounded-full bg-black/30 px-2 py-1 text-[11px] text-white transition hover:bg-black/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                aria-label="返信をキャンセル"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
         {previewUrl && (
           <div className="mb-3 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(14,18,16,0.95),rgba(8,12,10,0.98))] p-4 shadow-[0_0_20px_rgba(16,185,129,0.04)]">
             <div className="flex items-start gap-3">
@@ -152,7 +191,13 @@ export function TimelineComposer({
             <input
               value={value}
               onChange={(e) => onChangeValue(e.target.value)}
-              placeholder="この試合について投稿する"
+              placeholder={
+                replyToPost
+                  ? `${
+                      replyToPost.profiles?.nickname ?? 'ユーザー'
+                    } に返信する`
+                  : 'この試合について投稿する'
+              }
               className="h-10 w-full min-w-0 rounded-full border border-white/10 bg-panelSoft px-4 text-base text-textMain placeholder:text-textSub focus:border-accent focus:outline-none"
               maxLength={280}
               autoComplete="off"
@@ -166,7 +211,7 @@ export function TimelineComposer({
             disabled={sending || (!value.trim() && !selectedImage)}
             className="h-10 shrink-0 whitespace-nowrap rounded-full bg-accent px-4 text-sm font-semibold text-black transition disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {sending ? '送信中' : '投稿'}
+            {sending ? '送信中' : replyToPost ? '返信' : '投稿'}
           </button>
         </div>
       </div>

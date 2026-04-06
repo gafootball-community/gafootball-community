@@ -40,6 +40,7 @@ type Props = {
   onReport: (postId: string) => void;
   onDelete: (postId: string) => void;
   onLike: (post: TimelinePost) => void;
+  onReply: (post: TimelinePost) => void;
 };
 
 export function TimelinePostCard({
@@ -53,6 +54,7 @@ export function TimelinePostCard({
   onReport,
   onDelete,
   onLike,
+  onReply,
 }: Props) {
   return (
     <article className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(14,18,16,0.95),rgba(8,12,10,0.98))] p-4 shadow-[0_0_20px_rgba(16,185,129,0.04)]">
@@ -125,6 +127,7 @@ export function TimelinePostCard({
 
               <button
                 type="button"
+                onClick={() => onReply(post)}
                 className="shrink-0 whitespace-nowrap rounded-full px-2 py-1.5 transition hover:bg-white/5 hover:text-textMain focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-2.5"
               >
                 返信
