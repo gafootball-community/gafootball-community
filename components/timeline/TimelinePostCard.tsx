@@ -41,6 +41,7 @@ type Props = {
   onDelete: (postId: string) => void;
   onLike: (post: TimelinePost) => void;
   onReply: (post: TimelinePost) => void;
+  onOpenThread: (post: TimelinePost) => void;
 };
 
 export function TimelinePostCard({
@@ -55,6 +56,7 @@ export function TimelinePostCard({
   onDelete,
   onLike,
   onReply,
+  onOpenThread,
 }: Props) {
   return (
     <article className="rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(14,18,16,0.95),rgba(8,12,10,0.98))] p-4 shadow-[0_0_20px_rgba(16,185,129,0.04)]">
@@ -78,42 +80,60 @@ export function TimelinePostCard({
         </button>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => onProfileClick(post.profile_id)}
-              className="truncate text-left text-sm font-semibold text-white focus:outline-none focus-visible:underline"
-            >
-              {post.profiles?.nickname ?? '匿名ユーザー'}
-            </button>
+          <button
+            type="button"
+            onClick={() => onOpenThread(post)}
+            className="block w-full rounded-2xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-block max-w-full"
+                >
+                  <button
+                    type="button"
+                    onClick={() => onProfileClick(post.profile_id)}
+                    className="truncate text-left text-sm font-semibold text-white focus:outline-none focus-visible:underline"
+                  >
+                    {post.profiles?.nickname ?? '匿名ユーザー'}
+                  </button>
+                </div>
+              </div>
 
-            <div className="shrink-0 text-[11px] text-textSub">
-              <span>{formatPostTime(post.created_at)}</span>
+              <div className="shrink-0 text-[11px] text-textSub">
+                <span>{formatPostTime(post.created_at)}</span>
+              </div>
             </div>
-          </div>
 
-          {post.content && (
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-textMain">
-              {post.content}
-            </p>
-          )}
+            {post.content && (
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-textMain">
+                {post.content}
+              </p>
+            )}
 
-          {post.image_url && (
-            <div className="mt-3 overflow-hidden rounded-2xl border border-white/10">
-              <button
-                type="button"
-                onClick={() => onImageClick(post.image_url!)}
-                className="block w-full transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-              >
-                <img
-                  src={post.image_url}
-                  alt="timeline post"
-                  className="max-h-[360px] w-full object-cover"
-                  loading="lazy"
-                />
-              </button>
-            </div>
-          )}
+            {post.image_url && (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-white/10">
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="block"
+                >
+                  <button
+                    type="button"
+                    onClick={() => onImageClick(post.image_url!)}
+                    className="block w-full transition hover:opacity-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                  >
+                    <img
+                      src={post.image_url}
+                      alt="timeline post"
+                      className="max-h-[360px] w-full object-cover"
+                      loading="lazy"
+                    />
+                  </button>
+                </div>
+              </div>
+            )}
+          </button>
 
           <div className="mt-4 flex items-center justify-between gap-3 text-xs text-textSub">
             <div className="flex min-w-0 items-center gap-2 sm:gap-3">
