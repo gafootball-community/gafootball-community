@@ -60,6 +60,7 @@ type TimelinePostRow = Omit<
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const PAGE_SIZE = 20;
 
 function createStoragePath(profileId: string, file: File) {
   const extension = file.name.split('.').pop()?.toLowerCase() ?? 'jpg';
@@ -135,6 +136,32 @@ async function fetchPostWithProfile(
   return hydrated[0] ?? null;
 }
 
+async function fetchPostsPage({
+  fixtureId,
+  myId,
+  beforeCreatedAt,
+}: {
+  fixtureId: string;
+  myId: string | null;
+  beforeCreatedAt?: string | null;
+}): Promise<TimelinePost[]> {
+  let query = supabase
+    .from('timeline_posts')
+    .select('*, profiles:profile_id (id, nickname, avatar_url)')
+    .eq('fixture_id', fixtureId)
+    .order('created_at', { ascending: false })
+    .limit(PAGE_SIZE + 1);
+
+  if (beforeCreatedAt) {
+    query = query.lt('created_at', beforeCreatedAt);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return attachLikesToPosts((data ?? []) as TimelinePost[], myId);
+}
+
 export default function TimelineDetailPage() {
   const { fixtureId } = useParams<{ fixtureId: string }>();
   const router = useRouter();
@@ -142,6 +169,8 @@ export default function TimelineDetailPage() {
   const [fixture, setFixture] = useState<Fixture | null>(null);
   const [posts, setPosts] = useState<TimelinePost[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
 
   const [value, setValue] = useState('');
   const [sending, setSending] = useState(false);
@@ -196,6 +225,67 @@ export default function TimelineDetailPage() {
     [myId]
   );
 
+  const handleDownloadImage = useCallback(async () => {
+    if (!modalImage) return;
+
+    try {
+      const res = await fetch(modalImage);
+      if (!res.ok) {
+        throw new Error('画像の取得に失敗しました。');
+      }
+
+      const blob = await res.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+
+      const extensionMatch = modalImage.match(/\.(jpg|jpeg|png|webp)(\?|$)/i);
+      const ext = extensionMatch?.[1]?.toLowerCase() ?? 'jpg';
+      const filename = `timeline-image.${ext === 'jpeg' ? 'jpg' : ext}`;
+
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (e) {
+      window.alert('保存に失敗しました。');
+    }
+  }, [modalImage]);
+
+  const loadMorePosts = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+
+    setLoadingMore(true);
+
+    try {
+      const lastPost = posts[posts.length - 1];
+      const olderPosts = await fetchPostsPage({
+        fixtureId,
+        myId,
+        beforeCreatedAt: lastPost?.created_at ?? null,
+      });
+
+      setPosts((prev) => {
+        const existingIds = new Set(prev.map((post) => post.id));
+        const uniqueOlderPosts = olderPosts
+          .slice(0, PAGE_SIZE)
+          .filter((post) => !existingIds.has(post.id));
+
+        return [...prev, ...uniqueOlderPosts];
+      });
+
+      setHasMore(olderPosts.length > PAGE_SIZE);
+    } catch (e) {
+      window.alert(
+        e instanceof Error ? e.message : '追加読み込みに失敗しました。'
+      );
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [fixtureId, hasMore, loadingMore, myId, posts]);
+
   useEffect(() => {
     const init = async () => {
       try {
@@ -241,21 +331,14 @@ export default function TimelineDetailPage() {
           return;
         }
 
-        const { data: postData, error: postError } = await supabase
-          .from('timeline_posts')
-          .select('*, profiles:profile_id (id, nickname, avatar_url)')
-          .eq('fixture_id', fixtureId)
-          .order('created_at', { ascending: false });
-
-        if (postError) throw postError;
-
-        const hydratedPosts = await attachLikesToPosts(
-          (postData ?? []) as TimelinePost[],
-          user.id
-        );
+        const firstPosts = await fetchPostsPage({
+          fixtureId,
+          myId: user.id,
+        });
 
         setFixture(nextFixture);
-        setPosts(hydratedPosts);
+        setPosts(firstPosts.slice(0, PAGE_SIZE));
+        setHasMore(firstPosts.length > PAGE_SIZE);
       } catch (e) {
         window.alert(
           e instanceof Error
@@ -607,23 +690,38 @@ export default function TimelineDetailPage() {
                   まだ投稿はありません。最初の投稿をしてみよう。
                 </div>
               ) : (
-                visiblePosts.map((post) => (
-                  <TimelinePostCard
-                    key={post.id}
-                    post={post}
-                    mine={myId === post.profile_id}
-                    reporting={reportingId === post.id}
-                    liking={likingId === post.id}
-                    animateLike={animatingLikeId === post.id}
-                    onProfileClick={(profileId) =>
-                      router.push(`/profile/${profileId}`)
-                    }
-                    onImageClick={(imageUrl) => setModalImage(imageUrl)}
-                    onReport={(postId) => void reportPost(postId)}
-                    onDelete={(postId) => void deletePost(postId)}
-                    onLike={(targetPost) => void toggleLike(targetPost)}
-                  />
-                ))
+                <>
+                  {visiblePosts.map((post) => (
+                    <TimelinePostCard
+                      key={post.id}
+                      post={post}
+                      mine={myId === post.profile_id}
+                      reporting={reportingId === post.id}
+                      liking={likingId === post.id}
+                      animateLike={animatingLikeId === post.id}
+                      onProfileClick={(profileId) =>
+                        router.push(`/profile/${profileId}`)
+                      }
+                      onImageClick={(imageUrl) => setModalImage(imageUrl)}
+                      onReport={(postId) => void reportPost(postId)}
+                      onDelete={(postId) => void deletePost(postId)}
+                      onLike={(targetPost) => void toggleLike(targetPost)}
+                    />
+                  ))}
+
+                  {hasMore && (
+                    <div className="flex justify-center pt-2">
+                      <button
+                        type="button"
+                        onClick={() => void loadMorePosts()}
+                        disabled={loadingMore}
+                        className="rounded-full border border-white/10 bg-panelSoft px-5 py-2 text-sm text-white transition hover:border-accent/30 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {loadingMore ? '読み込み中...' : 'さらに表示'}
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </section>
 
@@ -665,15 +763,13 @@ export default function TimelineDetailPage() {
                   />
 
                   <div className="mt-3 flex justify-center">
-                    <a
-                      href={modalImage}
-                      download
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => void handleDownloadImage()}
                       className="rounded-full border border-white/10 bg-panelSoft px-4 py-2 text-sm text-white transition hover:border-accent/30"
                     >
                       画像を保存
-                    </a>
+                    </button>
                   </div>
                 </div>
               </div>
