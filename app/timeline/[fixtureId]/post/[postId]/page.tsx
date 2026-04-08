@@ -210,18 +210,26 @@ export default function TimelineThreadPage() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const replies = useMemo(
-    () =>
-      threadPosts.filter(
-        (post) =>
-          post.id !== postId &&
-          !post.is_hidden &&
-          !post.is_deleted &&
-          (!fixture?.expires_at ||
-            new Date(fixture.expires_at).getTime() > Date.now())
-      ),
-    [threadPosts, postId, fixture]
-  );
+  const replies = useMemo(() => {
+    const filtered = threadPosts.filter(
+      (post) =>
+        post.id !== postId &&
+        !post.is_hidden &&
+        !post.is_deleted &&
+        (!fixture?.expires_at ||
+          new Date(fixture.expires_at).getTime() > Date.now())
+    );
+
+    return filtered.sort((a, b) => {
+      const aMine = a.profile_id === myId;
+      const bMine = b.profile_id === myId;
+
+      if (aMine && !bMine) return -1;
+      if (!aMine && bMine) return 1;
+
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    });
+  }, [threadPosts, postId, fixture, myId]);
 
   const depthMap = useMemo(
     () => buildDepthMap(threadPosts, postId),
@@ -713,34 +721,37 @@ export default function TimelineThreadPage() {
               const depth = Math.min(depthMap.get(reply.id) ?? 1, 4);
 
               return (
-                <div
-                  key={reply.id}
-                  className="relative"
-                  style={{ marginLeft: `${(depth - 1) * 14}px` }}
-                >
-                  {depth > 0 && (
+                <div key={reply.id} className="relative ml-4 sm:ml-6">
+                  <div
+                    className="absolute left-[-12px] top-0 h-full w-px bg-white/10"
+                    aria-hidden="true"
+                  />
+
+                  {depth > 1 && (
                     <div
-                      className="absolute left-[-10px] top-0 h-full w-px bg-white/10"
+                      className="absolute left-[-12px] top-6 h-px w-3 bg-white/10"
                       aria-hidden="true"
                     />
                   )}
 
-                  <TimelinePostCard
-                    post={reply}
-                    mine={myId === reply.profile_id}
-                    reporting={reportingId === reply.id}
-                    liking={likingId === reply.id}
-                    animateLike={animatingLikeId === reply.id}
-                    onProfileClick={(profileId) =>
-                      router.push(`/profile/${profileId}`)
-                    }
-                    onImageClick={(imageUrl) => setModalImage(imageUrl)}
-                    onReport={(targetPostId) => void reportPost(targetPostId)}
-                    onDelete={(targetPostId) => void deletePost(targetPostId)}
-                    onLike={(targetPost) => void toggleLike(targetPost)}
-                    onReply={(targetPost) => setReplyToPost(targetPost)}
-                    onOpenThread={(targetPost) => openThread(targetPost)}
-                  />
+                  <div className="origin-top scale-[0.97]">
+                    <TimelinePostCard
+                      post={reply}
+                      mine={myId === reply.profile_id}
+                      reporting={reportingId === reply.id}
+                      liking={likingId === reply.id}
+                      animateLike={animatingLikeId === reply.id}
+                      onProfileClick={(profileId) =>
+                        router.push(`/profile/${profileId}`)
+                      }
+                      onImageClick={(imageUrl) => setModalImage(imageUrl)}
+                      onReport={(targetPostId) => void reportPost(targetPostId)}
+                      onDelete={(targetPostId) => void deletePost(targetPostId)}
+                      onLike={(targetPost) => void toggleLike(targetPost)}
+                      onReply={(targetPost) => setReplyToPost(targetPost)}
+                      onOpenThread={(targetPost) => openThread(targetPost)}
+                    />
+                  </div>
                 </div>
               );
             })

@@ -720,7 +720,9 @@ export default function TimelineDetailPage() {
                       onReport={(postId) => void reportPost(postId)}
                       onDelete={(postId) => void deletePost(postId)}
                       onLike={(targetPost) => void toggleLike(targetPost)}
-                      onReply={(targetPost) => setReplyToPost(targetPost)}
+                      onReply={(targetPost) =>
+                        router.push(`/timeline/${fixtureId}/post/${targetPost.id}`)
+                      }
                       onOpenThread={(targetPost) => openThread(targetPost.id)}
                     />
                   ))}
