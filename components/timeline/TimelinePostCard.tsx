@@ -20,6 +20,7 @@ type TimelinePost = {
   profiles?: TimelineProfile | null;
   like_count?: number;
   liked_by_me?: boolean;
+  reply_count?: number;
 };
 
 function formatPostTime(date: string) {
@@ -151,6 +152,14 @@ export function TimelinePostCard({
                 className="shrink-0 whitespace-nowrap rounded-full px-2 py-1.5 transition hover:bg-white/5 hover:text-textMain focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-2.5"
               >
                 返信
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onOpenThread(post)}
+                className="shrink-0 whitespace-nowrap rounded-full px-2 py-1.5 text-accent transition hover:bg-white/5 hover:text-accent/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-2.5"
+              >
+                {post.reply_count ?? 0}
               </button>
             </div>
 

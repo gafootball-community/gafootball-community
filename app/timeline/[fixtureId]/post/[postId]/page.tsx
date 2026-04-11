@@ -50,6 +50,7 @@ type TimelinePost = {
   profiles?: TimelineProfile | null;
   like_count?: number;
   liked_by_me?: boolean;
+  reply_count?: number;
 };
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
@@ -106,6 +107,38 @@ async function attachLikesToPosts(
   }));
 }
 
+async function attachReplyCountsToPosts(
+  posts: TimelinePost[]
+): Promise<TimelinePost[]> {
+  if (posts.length === 0) return [];
+
+  const postIds = posts.map((post) => post.id);
+
+  const { data, error } = await supabase
+    .from('timeline_posts')
+    .select('reply_to_id')
+    .in('reply_to_id', postIds)
+    .eq('is_hidden', false)
+    .eq('is_deleted', false);
+
+  if (error) throw error;
+
+  const replyCountMap = new Map<string, number>();
+
+  for (const row of (data ?? []) as { reply_to_id: string | null }[]) {
+    if (!row.reply_to_id) continue;
+    replyCountMap.set(
+      row.reply_to_id,
+      (replyCountMap.get(row.reply_to_id) ?? 0) + 1
+    );
+  }
+
+  return posts.map((post) => ({
+    ...post,
+    reply_count: replyCountMap.get(post.id) ?? 0,
+  }));
+}
+
 async function fetchThreadPosts(
   rootPostId: string,
   myId: string | null
@@ -139,7 +172,8 @@ async function fetchThreadPosts(
   }
 
   const posts = Array.from(collected.values());
-  const hydrated = await attachLikesToPosts(posts, myId);
+  const liked = await attachLikesToPosts(posts, myId);
+  const hydrated = await attachReplyCountsToPosts(liked);
 
   return hydrated.sort(
     (a, b) =>
@@ -244,11 +278,14 @@ export default function TimelineThreadPage() {
       setRootPost(nextRoot);
       setThreadPosts(posts);
 
-      if (!replyToPost || !posts.some((post) => post.id === replyToPost.id)) {
-        setReplyToPost(nextRoot);
-      }
+      setReplyToPost((current) => {
+        if (!current || !posts.some((post) => post.id === current.id)) {
+          return nextRoot;
+        }
+        return current;
+      });
     },
-    [postId, replyToPost]
+    [postId]
   );
 
   useEffect(() => {
@@ -709,7 +746,7 @@ export default function TimelineThreadPage() {
             onDelete={(targetPostId) => void deletePost(targetPostId)}
             onLike={(targetPost) => void toggleLike(targetPost)}
             onReply={(targetPost) => setReplyToPost(targetPost)}
-            onOpenThread={() => {}}
+            onOpenThread={(targetPost) => openThread(targetPost)}
           />
 
           {replies.length === 0 ? (
